@@ -150,11 +150,13 @@ class Trimmer {
   /// NOTE: The advanced option does not provide any safety check, so if wrong
   /// video format is passed in [customVideoFormat], then the app may
   /// crash.
-  ///
+  /// 正确执行后返回保存的视频地址，出错返回空字符串
   Future<String> saveTrimmedVideo({
     @required double startValue,
     @required double endValue,
-    bool applyVideoEncoding = false,
+    applyVideoEncoding = false,
+    @required int crfValue,
+    @required int h264Preset,
     FileFormat outputFormat,
     String ffmpegCommand,
     String customVideoFormat,
@@ -217,6 +219,13 @@ class Trimmer {
       _outputFormatString = outputFormat.toString();
     }
 
+    /*对输入文件执行seek操作，会seek到-ss设置的时间点前面的关键帧上。 
+    时间不精确，但是不会出现黑屏
+    avoid_negative_ts make_zero
+    Shift timestamps so that the first timestamp is 0.
+    When shifting is enabled, all output timestamps are shifted by the same amount.
+    Audio, video, and subtitles desynching and relative timestamp differences are preserved compared to how they would have been without shifting.
+    */
     String _trimLengthCommand =
         ' -ss $startPoint -i "$_videoPath" -t ${endPoint - startPoint} -avoid_negative_ts make_zero ';
 
@@ -225,6 +234,11 @@ class Trimmer {
 
       if (!applyVideoEncoding) {
         _command += '-c:v copy ';
+      }
+      //应用视频编码 H.264
+      else {
+        _command += '-vcodec h264 -crf $crfValue -preset $h264Preset ';
+        //_command += '-c:v x264 ';
       }
 
       if (outputFormat == FileFormat.gif) {
@@ -246,6 +260,7 @@ class Trimmer {
 
     _command += '"$_outputPath"';
 
+    print('FFmpeg 命令为: $_command');
     await _flutterFFmpeg.execute(_command).whenComplete(() {
       print('Got value');
       debugPrint('Video successfuly saved');
@@ -254,6 +269,7 @@ class Trimmer {
       print('Error');
       // _resultString = 'Couldn\'t save the video';
       debugPrint('Couldn\'t save the video');
+      return '';
     });
 
     return _outputPath;
